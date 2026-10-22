@@ -17,6 +17,8 @@ constexpr Circle status    { 1073.0f, 410.9f, 36.0f };    // LED STATUS
 const juce::Rectangle<float> glowRate   { 489.0f, 131.0f, 540.0f, 539.0f };
 const juce::Rectangle<float> glowFoot   { 580.0f, 1238.0f, 359.0f, 360.0f };
 const juce::Rectangle<float> glowStatus { 990.0f, 328.0f, 165.0f, 165.0f };
+const juce::Rectangle<float> labelSync  { 1107.0f, 366.0f, 201.0f, 89.0f };   // inscription SYNC (image avec marge)
+const juce::Rectangle<float> hitSync    { 1130.0f, 385.0f, 155.0f, 50.0f };    // zone cliquable du mot SYNC
 const juce::Rectangle<float> toggle     { 364.0f, 338.0f, 152.0f, 142.0f };
 const juce::Rectangle<float> labelDin   { 389.0f, 276.0f, 92.0f, 48.0f };     // "DIN."
 const juce::Rectangle<float> labelDepth { 314.0f, 508.0f, 160.0f, 52.0f };    // "DEPTH"
@@ -67,8 +69,8 @@ private:
     void paintStatusLine (juce::Graphics&) const;
 
     SmallToneProcessor& proc;
-    juce::Image background, glowRate, glowFoot, glowStatus, toggleUp, toggleDown, toggleMid;
-    juce::Image sBackground, sGlowRate, sGlowFoot, sGlowStatus, sToggleUp, sToggleDown, sToggleMid;
+    juce::Image background, glowRate, glowFoot, glowStatus, toggleUp, toggleDown, toggleMid, labelSync, labelSyncGlow;
+    juce::Image sBackground, sGlowRate, sGlowFoot, sGlowStatus, sToggleUp, sToggleDown, sToggleMid, sLabelSync, sLabelSyncGlow;
     juce::Typeface::Ptr labelFace;
     float capRatio = 0.72f, capTopRatio = -0.72f;    // capitales : hauteur et haut (y) / hauteur de police
 
@@ -85,6 +87,7 @@ private:
     bool shownDeep = true;          // position du levier affichée
     double toggleMidUntil = 0.0;
     float ledFlash = 0.0f; bool ledArmed = false;
+    float syncGlow = 0.0f;           // halo du mot SYNC quand la synchro est active
     juce::String lastPresetShown;    // bascule : levier au point mort pendant ~45 ms
 
     std::unique_ptr<juce::AlertWindow> nameDialog;

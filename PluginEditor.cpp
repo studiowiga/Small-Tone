@@ -16,6 +16,8 @@ SmallToneEditor::SmallToneEditor (SmallToneProcessor& p)
     toggleUp   = loadImg (BinaryData::toggle_up_png, BinaryData::toggle_up_pngSize);
     toggleDown = loadImg (BinaryData::toggle_down_png, BinaryData::toggle_down_pngSize);
     toggleMid  = loadImg (BinaryData::toggle_mid_png, BinaryData::toggle_mid_pngSize);
+    labelSync  = loadImg (BinaryData::label_sync_png, BinaryData::label_sync_pngSize);
+    labelSyncGlow = loadImg (BinaryData::label_sync_glow_png, BinaryData::label_sync_glow_pngSize);
     labelFace  = Typeface::createSystemTypefaceFor (BinaryData::SmallToneSans_ttf, BinaryData::SmallToneSans_ttfSize);
 
     {   // encre réelle du "H" : hauteur et position des capitales, pour coller au "USA" d'origine
@@ -71,6 +73,7 @@ void SmallToneEditor::rebuildScaledImages()
     if (background.isValid()) sBackground = background.rescaled (getWidth(), getHeight(), Graphics::highResamplingQuality);
     sGlowRate = rs (glowRate); sGlowFoot = rs (glowFoot); sGlowStatus = rs (glowStatus);
     sToggleUp = rs (toggleUp); sToggleDown = rs (toggleDown); sToggleMid = rs (toggleMid);
+    sLabelSync = rs (labelSync); sLabelSyncGlow = rs (labelSyncGlow);
 }
 
 //==============================================================================
@@ -149,6 +152,7 @@ void SmallToneEditor::timerCallback()
         ledTarget = on ? 0.22f + 0.78f * ledFlash : 0.55f * ledFlash;
     }
     ledLevel  += (ledTarget - ledLevel) * (sync ? 0.6f : k);
+    syncGlow  += ((sync ? 1.0f : 0.0f) - syncGlow) * 0.25f;
     // preset changé par le DAW / MIDI : nom affiché brièvement
     if (proc.presetName != lastPresetShown)
     {
@@ -175,6 +179,7 @@ void SmallToneEditor::timerCallback()
     // on ne redessine que ce qui bouge (potard, LED, switch, footswitch, ligne d'état)
     repaint (toWin (art::glowRate).toNearestInt().expanded (2));
     repaint (toWin (art::glowStatus).toNearestInt().expanded (2));
+    repaint (toWin (art::labelSync).toNearestInt().expanded (2));
     repaint (toWin (art::glowFoot).toNearestInt().expanded (2));
     repaint (toWin (art::toggle).toNearestInt().expanded (2));
     repaint (toWin ({ 160.0f, art::statusLineY - 40.0f, art::W - 320.0f, 80.0f }).toNearestInt());
@@ -205,6 +210,9 @@ void SmallToneEditor::paint (Graphics& g)
     // lumières (calques photo allumés, fondus selon l'état)
     drawOverlay (sGlowRate, art::glowRate, ringLevel);
     drawOverlay (sGlowStatus, art::glowStatus, ledLevel);
+    // inscription SYNC (sérigraphie) : s'illumine légèrement quand la synchro tempo est active
+    drawOverlay (sLabelSyncGlow, art::labelSync, 0.55f * syncGlow * (0.6f + 0.4f * ledLevel));
+    drawOverlay (sLabelSync, art::labelSync, 0.80f + 0.20f * syncGlow);
     drawOverlay (sGlowFoot, art::glowFoot, footLevel);
 
     // footswitch enfoncé
@@ -275,7 +283,7 @@ SmallToneEditor::Hit SmallToneEditor::hitAt (Point<float> a) const
     if (art::labelDin.contains (a)) return Hit::din;
     if (art::labelDepth.contains (a)) return Hit::depth;
     if (a.getDistanceFrom ({ art::foot.x, art::foot.y }) <= art::foot.r * 1.12f) return Hit::foot;
-    if (a.getDistanceFrom ({ art::status.x, art::status.y }) <= art::status.r * 1.6f) return Hit::led;
+    if (a.getDistanceFrom ({ art::status.x, art::status.y }) <= art::status.r * 1.6f || art::hitSync.contains (a)) return Hit::led;
     return Hit::none;
 }
 
@@ -330,7 +338,8 @@ void SmallToneEditor::mouseDrag (const MouseEvent& e)
 {
     if (dragging != Hit::knob) return;
     const auto d = e.position - dragStart;
-    const float range = 260.0f * scale() * (e.mods.isShiftDown() ? 5.0f : 1.0f);
+    // course complète = 420 px de souris quelle que soit la taille de la fenêtre (Maj = 4x plus fin)
+    const float range = 420.0f * (e.mods.isShiftDown() ? 4.0f : 1.0f);
     setRate (dragStartRate + (d.x - d.y) / range);
 }
 
@@ -351,7 +360,7 @@ void SmallToneEditor::mouseWheelMove (const MouseEvent& e, const MouseWheelDetai
 {
     if (hitAt (toArt (e.position)) != Hit::knob) return;
     const float step = (std::abs (w.deltaY) > 1.0e-6f ? w.deltaY : w.deltaX) * (w.isReversed ? -1.0f : 1.0f);
-    setRate (proc.getRate() + step * (e.mods.isShiftDown() ? 0.02f : 0.08f));
+    setRate (proc.getRate() + step * (e.mods.isShiftDown() ? 0.008f : 0.03f));
 }
 
 //==============================================================================

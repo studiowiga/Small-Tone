@@ -19,10 +19,10 @@ de 44,1 à 192 kHz). S'il échoue, le build est signalé en rouge.
 ## Commandes
 | Commande | Rôle |
 |---|---|
-| **RATE** | vitesse du LFO, ≈ 0,42 Hz → 9,4 Hz, courbe du potard 1M « ccw log » d'origine (beaucoup de résolution dans le lent). Tirer haut/bas ou gauche/droite, molette, **Maj** = réglage fin, double-clic = milieu (≈ 2 Hz) |
+| **RATE** | vitesse du LFO, ≈ 0,42 Hz → 9,4 Hz, courbe du potard 1M « ccw log » d'origine (beaucoup de résolution dans le lent). Tirer haut/bas ou gauche/droite (course complète ≈ 420 px de souris, quelle que soit la taille), molette, **Maj** = 4× plus fin, double-clic = milieu (≈ 2 Hz) |
 | Switch **DIN. / DEPTH** | haut = **DIN.** (léger, doublage), bas = **DEPTH** (profond, le son « liquide »). Clic sur le levier ou sur les inscriptions |
 | Footswitch | effet / bypass (anneau, LED STATUS et anneau du RATE s'allument) |
-| LED **STATUS** | clic = synchro du RATE sur le tempo du DAW (le potard choisit alors la valeur de note) ; la LED clignote en mesure. Nouveau clic = vitesse libre |
+| LED **STATUS** / mot **SYNC** | clic sur la LED ou sur SYNC = synchro du RATE sur le tempo du DAW (le potard choisit alors la valeur de note) ; la LED clignote en mesure et SYNC s'illumine. Nouveau clic = vitesse libre |
 | Ligne d'état (à la place de « USA ») | n'apparaît que pendant un réglage (vitesse, mode, preset, MIDI…) puis s'efface en fondu |
 
 Comme sur l'original, en **DEPTH** le condensateur de 10 µF arrondit le balayage : plus le RATE est rapide,

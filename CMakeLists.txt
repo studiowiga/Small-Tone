@@ -37,6 +37,8 @@ juce_add_binary_data(SmallToneAssets SOURCES
   toggle_up.png
   toggle_down.png
   toggle_mid.png
+  label_sync.png
+  label_sync_glow.png
   SmallToneSans.ttf)
 
 juce_add_plugin(SmallTone
