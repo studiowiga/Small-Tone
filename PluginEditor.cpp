@@ -40,16 +40,39 @@ SmallToneEditor::SmallToneEditor (SmallToneProcessor& p)
     ringLevel = ledLevel = footLevel = proc.isOn() ? 1.0f : 0.0f;
     shownDeep = proc.isDeep();
     lastPresetShown = proc.presetName;      // pas de message à l'ouverture
-    startTimerHz (60);
+    startTimerHz (30);                      // 30 i/s suffisent pour des LED et un potard fluides
 }
 
 SmallToneEditor::~SmallToneEditor() { stopTimer(); }
 
 //==============================================================================
+// Anti-gel de la fenêtre (Windows) : JUCE 8 dessine par défaut avec Direct2D (carte graphique).
+// Avec certains pilotes (Intel notamment) la fenêtre du plugin cesse de se rafraîchir alors que
+// le DAW continue de tourner. Le moteur logiciel est stable partout et largement assez rapide ici.
+void SmallToneEditor::useSoftwareRenderer()
+{
+   #if JUCE_WINDOWS
+    if (auto* peer = getPeer())
+    {
+        int sw = peer->getAvailableRenderingEngines().indexOf ("Software Renderer");
+        if (sw < 0) sw = 0;
+        if (peer->getCurrentRenderingEngine() != sw)
+            peer->setCurrentRenderingEngine (sw);
+    }
+   #endif
+}
+
+void SmallToneEditor::parentHierarchyChanged()
+{
+    useSoftwareRenderer();
+}
+
 void SmallToneEditor::resized()
 {
     const int minW = roundToInt (stui::heightDefault * (double) art::W / (double) art::H);
-    if (getHeight() < stui::heightDefault || getWidth() < minW) { setSize (minW, stui::heightDefault); return; }
+    // tolérance de 2 px : avec la mise à l'échelle Windows (125 %, 150 %…) l'hôte arrondit les tailles ;
+    // sans marge, les deux se renvoient la fenêtre en boucle
+    if (getHeight() < stui::heightDefault - 2 || getWidth() < minW - 2) { setSize (minW, stui::heightDefault); return; }
     proc.uiHeight.store (getHeight());
     rebuildScaledImages();
 }
@@ -165,7 +188,6 @@ void SmallToneEditor::timerCallback()
     if (proc.isDeep() != shownDeep)
     {
         shownDeep = proc.isDeep();
-    lastPresetShown = proc.presetName;      // pas de message à l'ouverture
         toggleMidUntil = Time::getMillisecondCounterHiRes() * 0.001 + 0.045;
     }
 
@@ -176,13 +198,38 @@ void SmallToneEditor::timerCallback()
         flash (String (learned == 0 ? "FOOTSWITCH" : learned == 1 ? "RATE" : "DEPTH") + " = CC " + String (cc), 2.0);
     }
 
-    // on ne redessine que ce qui bouge (potard, LED, switch, footswitch, ligne d'état)
-    repaint (toWin (art::glowRate).toNearestInt().expanded (2));
-    repaint (toWin (art::glowStatus).toNearestInt().expanded (2));
-    repaint (toWin (art::labelSync).toNearestInt().expanded (2));
-    repaint (toWin (art::glowFoot).toNearestInt().expanded (2));
-    repaint (toWin (art::toggle).toNearestInt().expanded (2));
-    repaint (toWin ({ 160.0f, art::statusLineY - 40.0f, art::W - 320.0f, 80.0f }).toNearestInt());
+    useSoftwareRenderer();   // au cas où la fenêtre a été recréée par l'hôte (changement d'écran, d'échelle…)
+
+    // on ne redessine une zone que si ce qu'elle affiche a vraiment changé (zéro travail au repos)
+    auto changed = [] (float& drawn, float now) { if (std::abs (drawn - now) < 0.002f) return false; drawn = now; return true; };
+    auto zone = [this] (juce::Rectangle<float> r) { repaint (toWin (r).toNearestInt().expanded (2)); };
+
+    const bool rateChanged = changed (drawnRate, proc.getRate());
+    const bool ringChanged = changed (drawnRing, ringLevel);
+    const bool ledChanged  = changed (drawnLed, ledLevel);
+    const bool syncChanged = changed (drawnSync, syncGlow);
+    const bool footChanged = changed (drawnFoot, footLevel) || footDown != drawnFootDown;
+    drawnFootDown = footDown;
+
+    if (rateChanged || ringChanged)  zone (art::glowRate);
+    if (ledChanged)                  zone (art::glowStatus);
+    if (syncChanged || ledChanged)   zone (art::labelSync);     // le halo SYNC suit aussi la LED
+    if (footChanged)                 zone (art::glowFoot);
+
+    const bool moving = Time::getMillisecondCounterHiRes() * 0.001 < toggleMidUntil;
+    if (shownDeep != drawnDeep || moving != drawnToggleMoving)
+    {
+        drawnDeep = shownDeep; drawnToggleMoving = moving;
+        zone (art::toggle);
+    }
+
+    const String st = statusText();
+    const bool alphaChanged = changed (drawnStatusAlpha, st.isEmpty() ? 0.0f : statusAlpha());
+    if (st != drawnStatus || alphaChanged)
+    {
+        drawnStatus = st;
+        zone ({ 160.0f, art::statusLineY - 40.0f, art::W - 320.0f, 80.0f });
+    }
 }
 
 //==============================================================================

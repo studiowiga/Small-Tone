@@ -37,6 +37,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void parentHierarchyChanged() override;
 
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -47,6 +48,7 @@ public:
 
 private:
     void timerCallback() override;
+    void useSoftwareRenderer();
     float scale() const { return (float) getWidth() / art::W; }
     juce::Point<float> toArt (juce::Point<float> p) const { return p / scale(); }
     juce::Rectangle<float> toWin (juce::Rectangle<float> r) const { const float s = scale(); return { r.getX() * s, r.getY() * s, r.getWidth() * s, r.getHeight() * s }; }
@@ -88,7 +90,12 @@ private:
     double toggleMidUntil = 0.0;
     float ledFlash = 0.0f; bool ledArmed = false;
     float syncGlow = 0.0f;           // halo du mot SYNC quand la synchro est active
-    juce::String lastPresetShown;    // bascule : levier au point mort pendant ~45 ms
+    juce::String lastPresetShown;    // dernier nom de preset affiché
+
+    // dernier état réellement dessiné : on ne redessine une zone que si elle a changé
+    float drawnRate = -1.0f, drawnRing = -1.0f, drawnLed = -1.0f, drawnSync = -1.0f, drawnFoot = -1.0f, drawnStatusAlpha = -1.0f;
+    bool drawnDeep = false, drawnToggleMoving = false, drawnFootDown = false;
+    juce::String drawnStatus;
 
     std::unique_ptr<juce::AlertWindow> nameDialog;
 
