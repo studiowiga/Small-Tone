@@ -9,19 +9,20 @@ namespace art
 {
 constexpr float W = 1520.0f, H = 1916.0f;
 struct Circle { float x, y, r; };
-constexpr Circle knob      { 763.2f, 407.7f, 163.0f };    // potard RATE (zone cliquable)
-constexpr float  indexR0 = 81.5f, indexR1 = 142.7f, indexW = 9.5f;   // index blanc du potard
+constexpr Circle knob      { 759.7f, 401.1f, 164.4f };    // potard RATE (zone cliquable)
+constexpr float  indexR0 = 82.2f, indexR1 = 143.9f, indexW = 9.6f;   // index blanc du potard
 constexpr float  knobSweep = 2.356194f;                   // ±135° (graduations de la sérigraphie)
-constexpr Circle foot      { 767.6f, 1417.9f, 89.2f };    // footswitch
-constexpr Circle status    { 1075.3f, 414.1f, 35.7f };    // LED STATUS
-const juce::Rectangle<float> glowRate   { 495.0f, 140.0f, 535.0f, 535.0f };
-const juce::Rectangle<float> glowFoot   { 589.0f, 1239.0f, 356.0f, 357.0f };
-const juce::Rectangle<float> glowStatus { 993.0f, 332.0f, 163.0f, 163.0f };
-const juce::Rectangle<float> toggle     { 370.0f, 350.0f, 150.0f, 140.0f };
-const juce::Rectangle<float> labelDin   { 395.0f, 288.0f, 92.0f, 48.0f };     // "DIN."
-const juce::Rectangle<float> labelDepth { 320.0f, 520.0f, 160.0f, 52.0f };    // "DEPTH"
-constexpr float statusLineY = 1789.9f;    // ligne "USA" d'origine (centre)
-constexpr float statusCapH  = 23.0f;      // hauteur des capitales de "USA"
+constexpr Circle foot      { 760.0f, 1418.5f, 89.9f };    // footswitch
+constexpr Circle status    { 1073.0f, 410.9f, 36.0f };    // LED STATUS
+const juce::Rectangle<float> glowRate   { 489.0f, 131.0f, 540.0f, 539.0f };
+const juce::Rectangle<float> glowFoot   { 580.0f, 1238.0f, 359.0f, 360.0f };
+const juce::Rectangle<float> glowStatus { 990.0f, 328.0f, 165.0f, 165.0f };
+const juce::Rectangle<float> toggle     { 364.0f, 338.0f, 152.0f, 142.0f };
+const juce::Rectangle<float> labelDin   { 389.0f, 276.0f, 92.0f, 48.0f };     // "DIN."
+const juce::Rectangle<float> labelDepth { 314.0f, 508.0f, 160.0f, 52.0f };    // "DEPTH"
+constexpr float statusLineX = 758.5f;  // centre de la ligne d'état
+constexpr float statusLineY = 1797.9f;    // ligne "USA" d'origine (centre)
+constexpr float statusCapH  = 23.2f;      // hauteur des capitales de "USA"
 }
 
 //==============================================================================

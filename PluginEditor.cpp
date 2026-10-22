@@ -220,7 +220,7 @@ void SmallToneEditor::paintStatusLine (Graphics& g) const
         bb = p.getBounds();
     }
     const float capTop = art::statusLineY * s - art::statusCapH * 0.5f * s;
-    const float dx = 767.6f * s - bb.getCentreX();
+    const float dx = art::statusLineX * s - bb.getCentreX();
     const float dy = capTop - capTopRatio * fontH;
     g.setColour (Colour (218, 218, 222).withAlpha (0.94f));
     g.fillPath (p, AffineTransform::translation (dx, dy));
