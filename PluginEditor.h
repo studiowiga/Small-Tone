@@ -48,13 +48,16 @@ private:
     float scale() const { return (float) getWidth() / art::W; }
     juce::Point<float> toArt (juce::Point<float> p) const { return p / scale(); }
     juce::Rectangle<float> toWin (juce::Rectangle<float> r) const { const float s = scale(); return { r.getX() * s, r.getY() * s, r.getWidth() * s, r.getHeight() * s }; }
-    enum class Hit { none, knob, toggle, din, depth, foot };
+    enum class Hit { none, knob, toggle, din, depth, foot, led };
     Hit hitAt (juce::Point<float> artPos) const;
 
     void setParam (const juce::String& id, float plain);
     void setRate (float r01);
     void flash (const juce::String& text, double seconds = 1.6);
     juce::String statusText() const;
+    float statusAlpha() const;
+    static constexpr double kStatusFade = 0.6;   // fondu de sortie de la ligne d'état (s)
+    juce::String syncText() const;
     juce::String rateText() const;
     void showContextMenu();
     void setWindowHeight (int h);
@@ -64,8 +67,8 @@ private:
     void paintStatusLine (juce::Graphics&) const;
 
     SmallToneProcessor& proc;
-    juce::Image background, glowRate, glowFoot, glowStatus, toggleUp, toggleDown;
-    juce::Image sBackground, sGlowRate, sGlowFoot, sGlowStatus, sToggleUp, sToggleDown;
+    juce::Image background, glowRate, glowFoot, glowStatus, toggleUp, toggleDown, toggleMid;
+    juce::Image sBackground, sGlowRate, sGlowFoot, sGlowStatus, sToggleUp, sToggleDown, sToggleMid;
     juce::Typeface::Ptr labelFace;
     float capRatio = 0.72f, capTopRatio = -0.72f;    // capitales : hauteur et haut (y) / hauteur de police
 
@@ -79,6 +82,10 @@ private:
     juce::String lastStatus;
     float lastRate = -1.0f; bool lastDeep = false, lastOn = false;
     int lastLearnShown = -1;
+    bool shownDeep = true;          // position du levier affichée
+    double toggleMidUntil = 0.0;
+    float ledFlash = 0.0f; bool ledArmed = false;
+    juce::String lastPresetShown;    // bascule : levier au point mort pendant ~45 ms
 
     std::unique_ptr<juce::AlertWindow> nameDialog;
 

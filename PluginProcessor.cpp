@@ -9,7 +9,7 @@ const std::vector<FactoryPreset>& SmallToneProcessor::factoryPresets()
     // position du potard RATE (0 … 1) / switch DEPTH
     static const std::vector<FactoryPreset> p {
         { "Classic Deep",       0.330f, true  },   // ≈ 1.2 Hz, le son Small Clone de référence
-        { "Grunge Water",       0.270f, true  },   // ≈ 1 Hz, clean liquide années 90
+        { "Grunge Water",       0.389f, true  },   // ≈ 1.45 Hz, RATE à 11 h + DEPTH : réglage de Kurt Cobain sur "Come As You Are"
         { "Slow Ocean",         0.020f, true  },   // ≈ 0.45 Hz, houle lente
         { "Seasick",            0.670f, true  },   // ≈ 3.5 Hz
         { "Rotary Fast",        0.900f, true  },   // ≈ 7 Hz, haut-parleur tournant

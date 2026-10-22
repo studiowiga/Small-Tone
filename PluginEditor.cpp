@@ -15,6 +15,7 @@ SmallToneEditor::SmallToneEditor (SmallToneProcessor& p)
     glowStatus = loadImg (BinaryData::glow_status_png, BinaryData::glow_status_pngSize);
     toggleUp   = loadImg (BinaryData::toggle_up_png, BinaryData::toggle_up_pngSize);
     toggleDown = loadImg (BinaryData::toggle_down_png, BinaryData::toggle_down_pngSize);
+    toggleMid  = loadImg (BinaryData::toggle_mid_png, BinaryData::toggle_mid_pngSize);
     labelFace  = Typeface::createSystemTypefaceFor (BinaryData::SmallToneSans_ttf, BinaryData::SmallToneSans_ttfSize);
 
     {   // encre réelle du "H" : hauteur et position des capitales, pour coller au "USA" d'origine
@@ -35,6 +36,8 @@ SmallToneEditor::SmallToneEditor (SmallToneProcessor& p)
     setSize (roundToInt (h0 * aspect), h0);
 
     ringLevel = ledLevel = footLevel = proc.isOn() ? 1.0f : 0.0f;
+    shownDeep = proc.isDeep();
+    lastPresetShown = proc.presetName;      // pas de message à l'ouverture
     startTimerHz (60);
 }
 
@@ -67,7 +70,7 @@ void SmallToneEditor::rebuildScaledImages()
     };
     if (background.isValid()) sBackground = background.rescaled (getWidth(), getHeight(), Graphics::highResamplingQuality);
     sGlowRate = rs (glowRate); sGlowFoot = rs (glowFoot); sGlowStatus = rs (glowStatus);
-    sToggleUp = rs (toggleUp); sToggleDown = rs (toggleDown);
+    sToggleUp = rs (toggleUp); sToggleDown = rs (toggleDown); sToggleMid = rs (toggleMid);
 }
 
 //==============================================================================
@@ -80,13 +83,25 @@ String SmallToneEditor::rateText() const
     return String (hz, hz < 1.0 ? 2 : 1) + " HZ";
 }
 
+String SmallToneEditor::syncText() const
+{
+    return SmallToneProcessor::syncDivisionName (SmallToneProcessor::syncDivisionIndex (proc.getRate()))
+           + "  @ " + String (proc.hostBpm.load(), 0) + " BPM";
+}
+
 String SmallToneEditor::statusText() const
 {
-    if (Time::getMillisecondCounterHiRes() * 0.001 < flashUntil) return flashText;
+    // la ligne d'état n'apparaît que pendant un réglage, puis s'efface (voir statusAlpha)
     if (proc.learnTarget.load() >= 0) return "MIDI LEARN...";
-    if (! proc.isOn()) return "BYPASS";
-    if (proc.presetName.isNotEmpty()) return proc.presetName.toUpperCase();
-    return "RATE " + rateText() + "  -  " + (proc.isDeep() ? "DEPTH" : "DIN.");
+    if (Time::getMillisecondCounterHiRes() * 0.001 < flashUntil + kStatusFade) return flashText;
+    return {};
+}
+
+float SmallToneEditor::statusAlpha() const
+{
+    if (proc.learnTarget.load() >= 0) return 1.0f;
+    const double left = flashUntil + kStatusFade - Time::getMillisecondCounterHiRes() * 0.001;
+    return (float) jlimit (0.0, 1.0, left / kStatusFade);
 }
 
 void SmallToneEditor::flash (const String& t, double seconds)
@@ -123,8 +138,32 @@ void SmallToneEditor::timerCallback()
     const float ringTarget = on ? (follow ? 0.42f + 0.58f * lfo : 1.0f) : 0.0f;
     const float k = 0.35f;   // LED : allumage rapide mais pas instantané
     ringLevel += (ringTarget - ringLevel) * k;
-    ledLevel  += ((on ? 1.0f : 0.0f) - ledLevel) * k;
+    const bool sync = proc.apvts.getRawParameterValue ("sync")->load() > 0.5f;
+    float ledTarget = on ? 1.0f : 0.0f;
+    if (sync)
+    {
+        // synchro tempo : la LED STATUS clignote à chaque cycle du LFO (donc en mesure avec le DAW)
+        if (lfo > 0.96f && ! ledArmed) { ledFlash = 1.0f; ledArmed = true; }
+        if (lfo < 0.5f) ledArmed = false;
+        ledFlash *= 0.84f;
+        ledTarget = on ? 0.22f + 0.78f * ledFlash : 0.55f * ledFlash;
+    }
+    ledLevel  += (ledTarget - ledLevel) * (sync ? 0.6f : k);
+    // preset changé par le DAW / MIDI : nom affiché brièvement
+    if (proc.presetName != lastPresetShown)
+    {
+        lastPresetShown = proc.presetName;
+        if (lastPresetShown.isNotEmpty()) flash (lastPresetShown.toUpperCase());
+    }
     footLevel += ((on ? 1.0f : 0.0f) - footLevel) * k;
+
+    // switch : à chaque changement (souris, MIDI, automation) le levier passe par le point mort
+    if (proc.isDeep() != shownDeep)
+    {
+        shownDeep = proc.isDeep();
+    lastPresetShown = proc.presetName;      // pas de message à l'ouverture
+        toggleMidUntil = Time::getMillisecondCounterHiRes() * 0.001 + 0.045;
+    }
 
     const int learned = proc.lastLearned.exchange (-1);
     if (learned >= 0)
@@ -158,7 +197,8 @@ void SmallToneEditor::paint (Graphics& g)
 
     // switch DEPTH : levier en haut = "DIN.", en bas = "DEPTH"
     {
-        const auto& im = proc.isDeep() ? sToggleDown : sToggleUp;
+        const bool moving = Time::getMillisecondCounterHiRes() * 0.001 < toggleMidUntil;
+        const auto& im = moving ? sToggleMid : (shownDeep ? sToggleDown : sToggleUp);
         if (im.isValid()) g.drawImageAt (im, roundToInt (art::toggle.getX() * s), roundToInt (art::toggle.getY() * s));
     }
 
@@ -203,6 +243,7 @@ void SmallToneEditor::paintStatusLine (Graphics& g) const
     // même police et même taille que le "USA" de la sérigraphie d'origine (à la place du "USA")
     const float s = scale();
     const String t = statusText();
+    if (t.isEmpty()) return;
     float fontH = art::statusCapH / capRatio * s;
     Font f (FontOptions (labelFace).withHeight (fontH));
     f.setExtraKerningFactor (0.04f);
@@ -222,7 +263,7 @@ void SmallToneEditor::paintStatusLine (Graphics& g) const
     const float capTop = art::statusLineY * s - art::statusCapH * 0.5f * s;
     const float dx = art::statusLineX * s - bb.getCentreX();
     const float dy = capTop - capTopRatio * fontH;
-    g.setColour (Colour (218, 218, 222).withAlpha (0.94f));
+    g.setColour (Colour (218, 218, 222).withAlpha (0.94f * statusAlpha()));
     g.fillPath (p, AffineTransform::translation (dx, dy));
 }
 
@@ -234,6 +275,7 @@ SmallToneEditor::Hit SmallToneEditor::hitAt (Point<float> a) const
     if (art::labelDin.contains (a)) return Hit::din;
     if (art::labelDepth.contains (a)) return Hit::depth;
     if (a.getDistanceFrom ({ art::foot.x, art::foot.y }) <= art::foot.r * 1.12f) return Hit::foot;
+    if (a.getDistanceFrom ({ art::status.x, art::status.y }) <= art::status.r * 1.6f) return Hit::led;
     return Hit::none;
 }
 
@@ -271,6 +313,14 @@ void SmallToneEditor::mouseDown (const MouseEvent& e)
             setParam ("on", proc.isOn() ? 0.0f : 1.0f);
             flash (proc.isOn() ? "ON" : "BYPASS", 1.0);
             break;
+        case Hit::led:
+        {
+            // LED STATUS = bouton de synchro tempo avec le DAW
+            const bool s = proc.apvts.getRawParameterValue ("sync")->load() < 0.5f;
+            setParam ("sync", s ? 1.0f : 0.0f);
+            flash (s ? "TEMPO SYNC  -  " + syncText() : "TEMPO SYNC OFF  -  " + rateText(), 2.2);
+            break;
+        }
         case Hit::none: break;
     }
     repaint();
@@ -348,7 +398,7 @@ void SmallToneEditor::showContextMenu()
 
     auto flag = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; };
     PopupMenu opt;
-    opt.addItem (501, "Rate synced to host tempo (" + String (proc.hostBpm.load(), 1) + " BPM)", true, flag ("sync"));
+    opt.addItem (501, "Rate synced to host tempo (" + String (proc.hostBpm.load(), 1) + " BPM)  -  or click the STATUS LED", true, flag ("sync"));
     opt.addItem (502, "Stereo spread (right channel LFO inverted)", true, flag ("stereo"));
     opt.addItem (503, "BBD hiss (analog noise floor)", true, flag ("noise"));
     opt.addItem (504, "Rate ring pulses with the LFO", true, flag ("ringlfo"));
@@ -393,7 +443,7 @@ void SmallToneEditor::showContextMenu()
         else if (r == 402) setWindowHeight (stui::height60);
         else if (r == 403) setWindowHeight (stui::height75);
         else if (r == 404) setWindowHeight (stui::height100);
-        else if (r == 501) { toggleFlag ("sync"); flash (flag ("sync") ? "TEMPO SYNC ON" : "TEMPO SYNC OFF"); }
+        else if (r == 501) { toggleFlag ("sync"); flash (flag ("sync") ? "TEMPO SYNC  -  " + syncText() : "TEMPO SYNC OFF  -  " + rateText(), 2.2); }
         else if (r == 502) { toggleFlag ("stereo"); flash (flag ("stereo") ? "STEREO SPREAD" : "MONO (ORIGINAL)"); }
         else if (r == 503) toggleFlag ("noise");
         else if (r == 504) toggleFlag ("ringlfo");

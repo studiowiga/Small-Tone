@@ -22,7 +22,8 @@ de 44,1 à 192 kHz). S'il échoue, le build est signalé en rouge.
 | **RATE** | vitesse du LFO, ≈ 0,42 Hz → 9,4 Hz, courbe du potard 1M « ccw log » d'origine (beaucoup de résolution dans le lent). Tirer haut/bas ou gauche/droite, molette, **Maj** = réglage fin, double-clic = milieu (≈ 2 Hz) |
 | Switch **DIN. / DEPTH** | haut = **DIN.** (léger, doublage), bas = **DEPTH** (profond, le son « liquide »). Clic sur le levier ou sur les inscriptions |
 | Footswitch | effet / bypass (anneau, LED STATUS et anneau du RATE s'allument) |
-| Ligne d'état (à la place de « USA ») | preset, vitesse en Hz, mode, ou BYPASS |
+| LED **STATUS** | clic = synchro du RATE sur le tempo du DAW (le potard choisit alors la valeur de note) ; la LED clignote en mesure. Nouveau clic = vitesse libre |
+| Ligne d'état (à la place de « USA ») | n'apparaît que pendant un réglage (vitesse, mode, preset, MIDI…) puis s'efface en fondu |
 
 Comme sur l'original, en **DEPTH** le condensateur de 10 µF arrondit le balayage : plus le RATE est rapide,
 plus la modulation devient douce. Basculer le switch fait glisser le délai pendant ~½ s (charge du 10 µF).
@@ -34,7 +35,7 @@ communs à toutes les instances (`%APPDATA%\Studio Wiga\Small Tone\user_presets.
 
 ## Clic droit (n'importe où)
 - **Window size** : défaut (493 px de haut = taille minimale, comme Holyverb), 60 %, 75 %, 100 % — ou tirer le coin.
-- **Options** : RATE synchronisé au tempo du DAW (2 mesures → 1/16), stéréo élargie (LFO inversé à droite ;
+- **Options** : RATE synchronisé au tempo du DAW (2 mesures → 1/16, aussi par clic sur la LED STATUS), stéréo élargie (LFO inversé à droite ;
   l'original est mono), souffle du BBD, anneau du RATE qui pulse avec le LFO.
 - **MIDI** : canal, *Learn* — par défaut Footswitch = CC 80, Rate = CC 81, Depth = CC 82 ;
   pédale à verrouillage ou momentanée ; Program Change n = preset n+1.
