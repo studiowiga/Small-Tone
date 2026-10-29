@@ -34,7 +34,7 @@ Rotary Fast, Subtle Thickener, Shimmer Clean, Warble, Bass Chorus. Clic droit �
 communs à toutes les instances (`%APPDATA%\Studio Wiga\Small Tone\user_presets.xml`).
 
 ## Clic droit (n'importe où)
-- **Window size** : défaut (493 px de haut = taille minimale, comme Holyverb), 60 %, 75 %, 100 % — ou tirer le coin.
+- **Window size** : 60 % (default, taille minimale, comme Holyverb), 75 %, 100 % — ou tirer le coin.
 - **Options** : RATE synchronisé au tempo du DAW (2 mesures → 1/16, aussi par clic sur la LED STATUS), stéréo élargie (LFO inversé à droite ;
   l'original est mono), souffle du BBD, anneau du RATE qui pulse avec le LFO.
 - **MIDI** : canal, *Learn* — par défaut Footswitch = CC 80, Rate = CC 81, Depth = CC 82, Sync = CC 83 ;
@@ -49,6 +49,8 @@ communs à toutes les instances (`%APPDATA%\Studio Wiga\Small Tone\user_presets.
   reconstruction ~6 kHz, saturation douce du MN3207, léger souffle.
 - **Mix** : sec + retardé à parts égales (pas de réglage de mix sur la pédale), niveau compensé.
 - Le 0,047 µF (repère A) découple la référence de l'intégrateur (pin 3) : il ne change ni la vitesse ni la forme du LFO.
+
+Notice d'utilisation bilingue (anglais puis français) : `docs/SmallTone_Manual_EN-FR_v1.2.0.pdf`.
 
 Police Inter (licence SIL OFL, `OFL-Inter.txt`).
 
