@@ -510,8 +510,7 @@ void SmallToneEditor::showContextMenu()
 
     PopupMenu size;
     const int h = getHeight();
-    size.addItem (401, "Default (" + String (stui::heightDefault) + " px)", true, std::abs (h - stui::heightDefault) < 8);
-    size.addItem (402, "60 %", true, std::abs (h - stui::height60) < 8);
+    size.addItem (401, "60 % (default)", true, std::abs (h - stui::heightDefault) < 8);
     size.addItem (403, "75 %", true, std::abs (h - stui::height75) < 8);
     size.addItem (404, "100 %", true, std::abs (h - stui::height100) < 8);
 
