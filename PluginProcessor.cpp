@@ -49,10 +49,16 @@ SmallToneProcessor::SmallToneProcessor()
                         .withOutput ("Output", AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "SmallToneState", createLayout())
 {
+    pRate = apvts.getRawParameterValue ("rate");       pDepth = apvts.getRawParameterValue ("depth");
+    pOn = apvts.getRawParameterValue ("on");           pSync = apvts.getRawParameterValue ("sync");
+    pStereo = apvts.getRawParameterValue ("stereo");   pNoise = apvts.getRawParameterValue ("noise");
+    pMidiChan = apvts.getRawParameterValue ("midichan");
+    pMomentary = apvts.getRawParameterValue ("ccmomentary");
     presetName = factoryPresets()[0].name;
+    startTimerHz (60);
 }
 
-SmallToneProcessor::~SmallToneProcessor() { cancelPendingUpdate(); }
+SmallToneProcessor::~SmallToneProcessor() { stopTimer(); }
 
 bool SmallToneProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 {
@@ -88,9 +94,10 @@ void SmallToneProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& m
     for (int c = inCh; c < outCh; ++c) buffer.copyFrom (c, 0, buffer, 0, 0, n);   // mono -> stéréo
 
     // ---- MIDI : learn, CC, program change
-    const int chan = (int) apvts.getRawParameterValue ("midichan")->load();
-    const bool momentary = apvts.getRawParameterValue ("ccmomentary")->load() > 0.5f;
-    bool triggerUi = false;
+    // Anti-gel v2 (Studio Wiga) : rien n'est envoyé à l'hôte d'ici (ni setValueNotifyingHost ni
+    // triggerAsyncUpdate) ; les valeurs vont dans la file pending*, vidée par le timer du processeur.
+    const int chan = (int) pMidiChan->load (std::memory_order_relaxed);
+    const bool momentary = pMomentary->load (std::memory_order_relaxed) > 0.5f;
     for (const auto m : midi)
     {
         const auto msg = m.getMessage();
@@ -102,26 +109,25 @@ void SmallToneProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& m
             if (lt >= 0)
             {
                 (lt == 0 ? ccFoot : lt == 1 ? ccRate : ccDepth).store (cc);
-                lastLearned.store (lt); learnTarget.store (-1); triggerUi = true;
+                lastLearned.store (lt); learnTarget.store (-1);
                 continue;
             }
             if (cc == ccFoot.load())
             {
                 const bool high = v >= 64;
-                if (momentary) { if (high && ! footCcWasHigh) { pendingFootToggle.fetch_add (1); triggerUi = true; } }
-                else { pendingFootSet.store (high ? 1 : 0); triggerUi = true; }
+                if (momentary) { if (high && ! footCcWasHigh) pendingFootToggle.fetch_add (1); }
+                else pendingFootSet.store (high ? 1 : 0);
                 footCcWasHigh = high;
             }
-            if (cc == ccRate.load())  { pendingRate.store (v / 127.0f); triggerUi = true; }
-            if (cc == ccDepth.load()) { pendingDepth.store (v >= 64 ? 1 : 0); triggerUi = true; }
+            if (cc == ccRate.load())  pendingRate.store (v / 127.0f);
+            if (cc == ccDepth.load()) pendingDepth.store (v >= 64 ? 1 : 0);
         }
         else if (msg.isProgramChange())
         {
-            pendingProgram.store (msg.getProgramChangeNumber()); triggerUi = true;
+            pendingProgram.store (msg.getProgramChangeNumber());
         }
     }
     midi.clear();
-    if (triggerUi) triggerAsyncUpdate();
 
     // ---- tempo
     double bpm = hostBpm.load();
@@ -134,9 +140,9 @@ void SmallToneProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& m
     st.rate = getRate();
     st.deep = isDeep();
     st.on = isOn();
-    st.stereoSpread = apvts.getRawParameterValue ("stereo")->load() > 0.5f;
-    st.noise = apvts.getRawParameterValue ("noise")->load() > 0.5f;
-    if (apvts.getRawParameterValue ("sync")->load() > 0.5f)
+    st.stereoSpread = pStereo->load (std::memory_order_relaxed) > 0.5f;
+    st.noise = pNoise->load (std::memory_order_relaxed) > 0.5f;
+    if (pSync->load (std::memory_order_relaxed) > 0.5f)
         st.syncHz = jlimit (0.05, 20.0, bpm / 60.0 / syncDivisionBeats (syncDivisionIndex ((float) st.rate)));
 
     float* io[2] { buffer.getWritePointer (0), buffer.getWritePointer (jmin (1, outCh - 1)) };
@@ -157,7 +163,7 @@ void SmallToneProcessor::setParam (const String& id, float plain)
     }
 }
 
-void SmallToneProcessor::handleAsyncUpdate()
+void SmallToneProcessor::timerCallback()
 {
     const float r = pendingRate.exchange (-1.0f);
     if (r >= 0.0f) setParam ("rate", r);

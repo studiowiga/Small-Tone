@@ -48,7 +48,17 @@ public:
 
 private:
     void timerCallback() override;
+    void visibilityChanged() override;
     void useSoftwareRenderer();
+    // anti-gel v2 : caches refaits par le timer seulement, suivi de la fenêtre hôte, de l'échelle
+    // et des redessins demandés (chien de garde)
+    float physicalScale() const;
+    void askRepaint (juce::Rectangle<int> r);
+    int cacheW = 0, cacheH = 0;
+    float cacheScale = 0.0f;
+    int resizeSettle = 0;
+    void* lastPeer = nullptr;
+    double lastPaintMs = 0.0, repaintAskedMs = 0.0, lastScaleCheckMs = 0.0, lastRendererCheckMs = 0.0;
     float scale() const { return (float) getWidth() / art::W; }
     juce::Point<float> toArt (juce::Point<float> p) const { return p / scale(); }
     juce::Rectangle<float> toWin (juce::Rectangle<float> r) const { const float s = scale(); return { r.getX() * s, r.getY() * s, r.getWidth() * s, r.getHeight() * s }; }
@@ -66,7 +76,7 @@ private:
     void showContextMenu();
     void setWindowHeight (int h);
     void askUserPresetName (int slot);
-    void rebuildScaledImages();
+    void rebuildScaledImages (float physScale = 0.0f);
     void paintIndex (juce::Graphics&) const;
     void paintStatusLine (juce::Graphics&) const;
 

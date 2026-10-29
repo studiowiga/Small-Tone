@@ -50,3 +50,7 @@ communs à toutes les instances (`%APPDATA%\Studio Wiga\Small Tone\user_presets.
 - Le 0,047 µF (repère A) découple la référence de l'intégrateur (pin 3) : il ne change ni la vitesse ni la forme du LFO.
 
 Police Inter (licence SIL OFL, `OFL-Inter.txt`).
+
+## Versions
+
+- v1.1.0 : anti-gel v2 (JUCE 8.0.15, caches refaits par le timer, chien de garde, aucun appel à l'hôte depuis le thread audio)

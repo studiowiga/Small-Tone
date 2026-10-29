@@ -12,7 +12,7 @@ constexpr int heightDefault = 493, height60 = 592, height75 = 740, height100 = 9
 struct FactoryPreset { const char* name; float rate; bool deep; };
 
 class SmallToneProcessor : public juce::AudioProcessor,
-                           private juce::AsyncUpdater
+                           private juce::Timer
 {
 public:
     SmallToneProcessor();
@@ -70,12 +70,16 @@ public:
     static int syncDivisionIndex (float rate01);
     static constexpr int numSyncDivisions = 9;
 
-    bool isOn() const     { return apvts.getRawParameterValue ("on")->load() > 0.5f; }
-    bool isDeep() const   { return apvts.getRawParameterValue ("depth")->load() > 0.5f; }
-    float getRate() const { return apvts.getRawParameterValue ("rate")->load(); }
+    bool isOn() const     { return pOn->load (std::memory_order_relaxed) > 0.5f; }
+    bool isDeep() const   { return pDepth->load (std::memory_order_relaxed) > 0.5f; }
+    float getRate() const { return pRate->load (std::memory_order_relaxed); }
 
 private:
-    void handleAsyncUpdate() override;
+    void timerCallback() override;      // anti-gel v2 : vide la file du MIDI (thread message, 60 Hz)
+
+    // valeurs lues par le thread audio : pointeurs obtenus une fois dans le constructeur
+    std::atomic<float>* pRate = nullptr, *pDepth = nullptr, *pOn = nullptr, *pSync = nullptr, *pStereo = nullptr,
+                      * pNoise = nullptr, *pMidiChan = nullptr, *pMomentary = nullptr;
     void setParam (const juce::String& id, float plainValue);
 
     smalltone::Engine engine;

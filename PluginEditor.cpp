@@ -35,7 +35,9 @@ SmallToneEditor::SmallToneEditor (SmallToneProcessor& p)
     setResizeLimits (roundToInt (stui::heightDefault * aspect), stui::heightDefault,
                      roundToInt (stui::heightMax * aspect), stui::heightMax);
     getConstrainer()->setFixedAspectRatio (aspect);
+    setOpaque (true);                      // anti-gel : l'hôte ne redessine jamais ce qui est derrière la fenêtre
     setSize (roundToInt (h0 * aspect), h0);
+    rebuildScaledImages();
 
     ringLevel = ledLevel = footLevel = proc.isOn() ? 1.0f : 0.0f;
     shownDeep = proc.isDeep();
@@ -49,10 +51,22 @@ SmallToneEditor::~SmallToneEditor() { stopTimer(); }
 // Anti-gel de la fenêtre (Windows) : JUCE 8 dessine par défaut avec Direct2D (carte graphique).
 // Avec certains pilotes (Intel notamment) la fenêtre du plugin cesse de se rafraîchir alors que
 // le DAW continue de tourner. Le moteur logiciel est stable partout et largement assez rapide ici.
+//
+// Anti-gel v2 (Studio Wiga) :
+//  1. moteur de rendu logiciel forcé sur Windows, appliqué à chaque nouvelle fenêtre hôte (peer)
+//     et revérifié toutes les secondes, jamais en boucle ;
+//  2. aucun calcul lourd dans paint() : le fond et les calques lumineux mis à l'échelle sont refaits
+//     par le timer seulement, après stabilisation de la taille ou quand l'échelle d'affichage change
+//     (au plus toutes les 250 ms) ;
+//  3. chien de garde : si un redessin demandé n'est pas arrivé au bout de 1,5 s alors que la fenêtre
+//     est visible, le moteur de rendu est réappliqué et toute la fenêtre est redessinée ;
+//  4. côté audio : aucun appel à l'hôte depuis le thread audio (voir PluginProcessor).
 void SmallToneEditor::useSoftwareRenderer()
 {
+    auto* peer = getPeer();
+    if (peer != lastPeer) { lastPeer = peer; repaint(); }
    #if JUCE_WINDOWS
-    if (auto* peer = getPeer())
+    if (peer != nullptr)
     {
         int sw = peer->getAvailableRenderingEngines().indexOf ("Software Renderer");
         if (sw < 0) sw = 0;
@@ -62,19 +76,26 @@ void SmallToneEditor::useSoftwareRenderer()
    #endif
 }
 
-void SmallToneEditor::parentHierarchyChanged()
+void SmallToneEditor::parentHierarchyChanged() { useSoftwareRenderer(); }
+void SmallToneEditor::visibilityChanged()      { useSoftwareRenderer(); if (isShowing()) repaint(); }
+
+void SmallToneEditor::askRepaint (Rectangle<int> r)
 {
-    useSoftwareRenderer();
+    if (repaintAskedMs <= 0.0) repaintAskedMs = Time::getMillisecondCounterHiRes();
+    repaint (r);
+}
+
+float SmallToneEditor::physicalScale() const
+{
+    return jlimit (1.0f, 4.0f, (float) Component::getApproximateScaleFactorForComponent (this));
 }
 
 void SmallToneEditor::resized()
 {
-    const int minW = roundToInt (stui::heightDefault * (double) art::W / (double) art::H);
-    // tolérance de 2 px : avec la mise à l'échelle Windows (125 %, 150 %…) l'hôte arrondit les tailles ;
-    // sans marge, les deux se renvoient la fenêtre en boucle
-    if (getHeight() < stui::heightDefault - 2 || getWidth() < minW - 2) { setSize (minW, stui::heightDefault); return; }
-    proc.uiHeight.store (getHeight());
-    rebuildScaledImages();
+    // anti-gel : jamais de setSize ici (mise à l'échelle Windows 125 / 150 % : l'hôte arrondit les tailles) ;
+    // les limites du constrainer (jamais plus petit que la taille par défaut) suffisent
+    proc.uiHeight.store (jlimit (stui::heightDefault, stui::heightMax, getHeight()));
+    resizeSettle = 4;              // les images seront refaites par le timer quand la taille ne bouge plus
 }
 
 void SmallToneEditor::setWindowHeight (int h)
@@ -83,20 +104,28 @@ void SmallToneEditor::setWindowHeight (int h)
     setSize (roundToInt ((double) h * art::W / art::H), h);
 }
 
-void SmallToneEditor::rebuildScaledImages()
+void SmallToneEditor::rebuildScaledImages (float sc)
 {
-    // images pré-redimensionnées une seule fois (affichage fluide à 60 i/s)
-    const float s = scale();
+    // images pré-redimensionnées une seule fois par taille / échelle, en pixels physiques
+    // (appelé par le constructeur et le timer, jamais par paint)
+    if (sc <= 0.0f) sc = cacheScale > 0.0f ? cacheScale : physicalScale();
+    if (getWidth() <= 0 || getHeight() <= 0) return;
+    if (getWidth() == cacheW && getHeight() == cacheH && std::abs (sc - cacheScale) < 0.01f && sBackground.isValid()) return;
+    cacheW = getWidth(); cacheH = getHeight(); cacheScale = sc;
+    const float s = scale() * sc;
     auto rs = [s] (const Image& im) -> Image
     {
         if (! im.isValid()) return {};
         const int w = jmax (1, roundToInt (im.getWidth() * s)), h = jmax (1, roundToInt (im.getHeight() * s));
         return im.rescaled (w, h, Graphics::highResamplingQuality);
     };
-    if (background.isValid()) sBackground = background.rescaled (getWidth(), getHeight(), Graphics::highResamplingQuality);
+    if (background.isValid())
+        sBackground = background.rescaled (jmax (1, roundToInt ((float) getWidth() * sc)), jmax (1, roundToInt ((float) getHeight() * sc)),
+                                           Graphics::highResamplingQuality);
     sGlowRate = rs (glowRate); sGlowFoot = rs (glowFoot); sGlowStatus = rs (glowStatus);
     sToggleUp = rs (toggleUp); sToggleDown = rs (toggleDown); sToggleMid = rs (toggleMid);
     sLabelSync = rs (labelSync); sLabelSyncGlow = rs (labelSyncGlow);
+    repaint();
 }
 
 //==============================================================================
@@ -198,11 +227,31 @@ void SmallToneEditor::timerCallback()
         flash (String (learned == 0 ? "FOOTSWITCH" : learned == 1 ? "RATE" : "DEPTH") + " = CC " + String (cc), 2.0);
     }
 
-    useSoftwareRenderer();   // au cas où la fenêtre a été recréée par l'hôte (changement d'écran, d'échelle…)
+    // moteur logiciel : seulement si la fenêtre hôte a changé, ou au plus une fois par seconde
+    const double nowMs = Time::getMillisecondCounterHiRes();
+    if (getPeer() != lastPeer || nowMs - lastRendererCheckMs > 1000.0) { lastRendererCheckMs = nowMs; useSoftwareRenderer(); }
+
+    // caches : reconstruits ici seulement (jamais dans paint)
+    if (resizeSettle > 0 && --resizeSettle == 0) rebuildScaledImages();
+    else if (resizeSettle == 0 && nowMs - lastScaleCheckMs > 250.0)
+    {
+        lastScaleCheckMs = nowMs;
+        const float sc = physicalScale();
+        if (std::abs (sc - cacheScale) > 0.01f) rebuildScaledImages (sc);
+    }
+
+    // chien de garde : un redessin demandé n'arrive pas -> on relance le moteur de rendu et on redessine tout
+    if (repaintAskedMs > 0.0 && isShowing() && nowMs - repaintAskedMs > 1500.0 && lastPaintMs < repaintAskedMs)
+    {
+        repaintAskedMs = 0.0;
+        lastPeer = nullptr;
+        useSoftwareRenderer();
+        repaint();
+    }
 
     // on ne redessine une zone que si ce qu'elle affiche a vraiment changé (zéro travail au repos)
     auto changed = [] (float& drawn, float now) { if (std::abs (drawn - now) < 0.002f) return false; drawn = now; return true; };
-    auto zone = [this] (juce::Rectangle<float> r) { repaint (toWin (r).toNearestInt().expanded (2)); };
+    auto zone = [this] (juce::Rectangle<float> r) { askRepaint (toWin (r).toNearestInt().expanded (2)); };
 
     const bool rateChanged = changed (drawnRate, proc.getRate());
     const bool ringChanged = changed (drawnRing, ringLevel);
@@ -235,32 +284,46 @@ void SmallToneEditor::timerCallback()
 //==============================================================================
 void SmallToneEditor::paint (Graphics& g)
 {
+    lastPaintMs = Time::getMillisecondCounterHiRes();
+    repaintAskedMs = 0.0;
     g.fillAll (Colour (7, 7, 7));
-    if (sBackground.isValid()) g.drawImageAt (sBackground, 0, 0);
+    // anti-gel : aucun rescale ici, on dessine les caches existants (ou les originaux en attendant le timer) ;
+    // la destination ne dépend que de la taille de la fenêtre, pas de la taille du cache
+    const bool cached = sBackground.isValid();
+    g.setImageResamplingQuality (cached ? Graphics::lowResamplingQuality : Graphics::highResamplingQuality);
+    g.drawImage (cached ? sBackground : background, getLocalBounds().toFloat());
     const float s = scale();
 
-    auto drawOverlay = [&] (const Image& im, Rectangle<float> r, float alpha)
+    auto place = [s] (const Image& orig, Rectangle<float> r)
     {
+        return Rectangle<float> ((float) roundToInt (r.getX() * s), (float) roundToInt (r.getY() * s),
+                                 (float) jmax (1, roundToInt (orig.getWidth() * s)), (float) jmax (1, roundToInt (orig.getHeight() * s)));
+    };
+    auto drawOverlay = [&] (const Image& scaledIm, const Image& orig, Rectangle<float> r, float alpha)
+    {
+        const Image& im = scaledIm.isValid() ? scaledIm : orig;
         if (alpha <= 0.003f || ! im.isValid()) return;
         g.setOpacity (jlimit (0.0f, 1.0f, alpha));
-        g.drawImageAt (im, roundToInt (r.getX() * s), roundToInt (r.getY() * s));
+        g.drawImage (im, place (orig, r));
         g.setOpacity (1.0f);
     };
 
     // switch DEPTH : levier en haut = "DIN.", en bas = "DEPTH"
     {
         const bool moving = Time::getMillisecondCounterHiRes() * 0.001 < toggleMidUntil;
-        const auto& im = moving ? sToggleMid : (shownDeep ? sToggleDown : sToggleUp);
-        if (im.isValid()) g.drawImageAt (im, roundToInt (art::toggle.getX() * s), roundToInt (art::toggle.getY() * s));
+        const auto& im   = moving ? sToggleMid : (shownDeep ? sToggleDown : sToggleUp);
+        const auto& orig = moving ? toggleMid  : (shownDeep ? toggleDown  : toggleUp);
+        const Image& use = im.isValid() ? im : orig;
+        if (use.isValid()) g.drawImage (use, place (orig, art::toggle));
     }
 
     // lumières (calques photo allumés, fondus selon l'état)
-    drawOverlay (sGlowRate, art::glowRate, ringLevel);
-    drawOverlay (sGlowStatus, art::glowStatus, ledLevel);
+    drawOverlay (sGlowRate, glowRate, art::glowRate, ringLevel);
+    drawOverlay (sGlowStatus, glowStatus, art::glowStatus, ledLevel);
     // inscription SYNC (sérigraphie) : s'illumine légèrement quand la synchro tempo est active
-    drawOverlay (sLabelSyncGlow, art::labelSync, 0.55f * syncGlow * (0.6f + 0.4f * ledLevel));
-    drawOverlay (sLabelSync, art::labelSync, 0.80f + 0.20f * syncGlow);
-    drawOverlay (sGlowFoot, art::glowFoot, footLevel);
+    drawOverlay (sLabelSyncGlow, labelSyncGlow, art::labelSync, 0.55f * syncGlow * (0.6f + 0.4f * ledLevel));
+    drawOverlay (sLabelSync, labelSync, art::labelSync, 0.80f + 0.20f * syncGlow);
+    drawOverlay (sGlowFoot, glowFoot, art::glowFoot, footLevel);
 
     // footswitch enfoncé
     if (footDown)
