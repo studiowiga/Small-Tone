@@ -147,7 +147,8 @@ String SmallToneEditor::syncText() const
 String SmallToneEditor::statusText() const
 {
     // la ligne d'état n'apparaît que pendant un réglage, puis s'efface (voir statusAlpha)
-    if (proc.learnTarget.load() >= 0) return "MIDI LEARN...";
+    if (const int lt = proc.learnTarget.load(); lt >= 0)
+        return "MIDI LEARN: move a control for " + String (SmallToneProcessor::learnDef (lt).name);
     if (Time::getMillisecondCounterHiRes() * 0.001 < flashUntil + kStatusFade) return flashText;
     return {};
 }
@@ -223,8 +224,7 @@ void SmallToneEditor::timerCallback()
     const int learned = proc.lastLearned.exchange (-1);
     if (learned >= 0)
     {
-        const int cc = learned == 0 ? proc.ccFoot.load() : learned == 1 ? proc.ccRate.load() : proc.ccDepth.load();
-        flash (String (learned == 0 ? "FOOTSWITCH" : learned == 1 ? "RATE" : "DEPTH") + " = CC " + String (cc), 2.0);
+        flash (String (SmallToneProcessor::learnDef (learned).name) + " = CC " + String (proc.ccMap[learned].load()), 2.0);
     }
 
     // moteur logiciel : seulement si la fenêtre hôte a changé, ou au plus une fois par seconde
@@ -406,7 +406,14 @@ void SmallToneEditor::mouseMove (const MouseEvent& e)
 
 void SmallToneEditor::mouseDown (const MouseEvent& e)
 {
-    if (e.mods.isPopupMenu()) { showContextMenu(); return; }
+    if (e.mods.isPopupMenu())
+    {
+        // clic droit sur une commande : MIDI Learn de cette commande en tête du menu
+        const auto hit = hitAt (toArt (e.position));
+        showContextMenu (hit == Hit::foot ? 0 : hit == Hit::knob ? 1
+                         : (hit == Hit::toggle || hit == Hit::din || hit == Hit::depth) ? 2 : hit == Hit::led ? 3 : -1);
+        return;
+    }
     const auto h = hitAt (toArt (e.position));
     dragging = Hit::none;
     switch (h)
@@ -493,7 +500,7 @@ void SmallToneEditor::askUserPresetName (int slot)
     }), false);
 }
 
-void SmallToneEditor::showContextMenu()
+void SmallToneEditor::showContextMenu (int learnIdx)
 {
     PopupMenu factory;
     const auto& fp = SmallToneProcessor::factoryPresets();
@@ -527,10 +534,12 @@ void SmallToneEditor::showContextMenu()
     for (int c = 1; c <= 16; ++c) chan.addItem (600 + c, String (c), true, ch == c);
     midi.addSubMenu ("Channel", chan);
     midi.addSeparator();
-    midi.addItem (701, "Learn: Footswitch (CC " + String (proc.ccFoot.load()) + ")");
-    midi.addItem (702, "Learn: Rate (CC " + String (proc.ccRate.load()) + ")");
-    midi.addItem (703, "Learn: Depth switch (CC " + String (proc.ccDepth.load()) + ")");
-    midi.addItem (704, "Reset MIDI assignments (CC 80-82)");
+    auto ccLabel = [] (int c) { return c >= 0 ? "CC " + String (c) : String ("none"); };
+    const int lt = proc.learnTarget.load();
+    for (int i = 0; i < SmallToneProcessor::numLearn; ++i)
+        midi.addItem (1000 + i, "Learn: " + String (SmallToneProcessor::learnDef (i).name) + " (" + ccLabel (proc.ccMap[i].load()) + ")", true, lt == i);
+    if (lt >= 0) midi.addItem (1200, "Cancel MIDI learn");
+    midi.addItem (1201, "Reset MIDI to defaults (CC 80-83)");
     midi.addSeparator();
     const bool mom = flag ("ccmomentary");
     midi.addItem (710, "Footswitch: latching pedal (127 = on, 0 = bypass)", true, ! mom);
@@ -538,6 +547,15 @@ void SmallToneEditor::showContextMenu()
     midi.addItem (-1, "Program Change n = factory preset n+1", false, false);
 
     PopupMenu m;
+    if (learnIdx >= 0)
+    {
+        const String name = SmallToneProcessor::learnDef (learnIdx).name;
+        const int cc = proc.ccMap[learnIdx].load();
+        m.addItem (1000 + learnIdx, "MIDI Learn: " + name + " (" + ccLabel (cc) + ")", true, lt == learnIdx);
+        m.addItem (1100 + learnIdx, "Clear MIDI: " + name, cc >= 0);
+        if (lt >= 0) m.addItem (1200, "Cancel MIDI learn");
+        m.addSeparator();
+    }
     m.addSectionHeader ("Small Tone v" JucePlugin_VersionString " - STUDIO WIGA");
     m.addSubMenu ("Factory presets", factory);
     m.addSubMenu ("Load user preset", load);
@@ -566,8 +584,19 @@ void SmallToneEditor::showContextMenu()
         else if (r == 503) toggleFlag ("noise");
         else if (r == 504) toggleFlag ("ringlfo");
         else if (r >= 600 && r <= 616) setParam ("midichan", (float) (r - 600));
-        else if (r >= 701 && r <= 703) proc.learnTarget.store (r - 701);
-        else if (r == 704) { proc.ccFoot = 80; proc.ccRate = 81; proc.ccDepth = 82; flash ("CC 80 / 81 / 82"); }
+        else if (r >= 1000 && r < 1000 + SmallToneProcessor::numLearn)
+        {
+            const int t = r - 1000;
+            if (proc.learnTarget.load() == t) { proc.learnTarget.store (-1); flash ("MIDI LEARN CANCELLED", 1.5); }   // re-cliquer annule
+            else proc.learnTarget.store (t);
+        }
+        else if (r >= 1100 && r < 1100 + SmallToneProcessor::numLearn)
+        {
+            proc.ccMap[r - 1100].store (-1);
+            flash (String (SmallToneProcessor::learnDef (r - 1100).name) + " : MIDI CLEARED", 1.5);
+        }
+        else if (r == 1200) { proc.learnTarget.store (-1); flash ("MIDI LEARN CANCELLED", 1.5); }
+        else if (r == 1201) { proc.learnTarget.store (-1); proc.resetMidiMap(); flash ("CC 80 / 81 / 82 / 83"); }
         else if (r == 710 || r == 711) setParam ("ccmomentary", r == 711 ? 1.0f : 0.0f);
         repaint();
     });

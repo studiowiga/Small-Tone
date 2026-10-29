@@ -43,6 +43,24 @@ AudioProcessorValueTreeState::ParameterLayout SmallToneProcessor::createLayout()
     return { p.begin(), p.end() };
 }
 
+//==============================================================================
+const SmallToneProcessor::LearnDef& SmallToneProcessor::learnDef (int i)
+{
+    static const LearnDef defs[numLearn] =
+    {
+        { "ccFoot",  "Footswitch",   80 },   // à accrochage ou momentané (option du menu MIDI)
+        { "ccRate",  "Rate",         81 },
+        { "ccDepth", "Depth switch", 82 },   // >= 64 : DEPTH
+        { "ccSync",  "Sync",         83 },   // >= 64 : synchro tempo (LED STATUS)
+    };
+    return defs[jlimit (0, numLearn - 1, i)];
+}
+
+void SmallToneProcessor::resetMidiMap()
+{
+    for (int i = 0; i < numLearn; ++i) ccMap[i].store (learnDef (i).defaultCC);
+}
+
 SmallToneProcessor::SmallToneProcessor()
     : AudioProcessor (BusesProperties()
                         .withInput  ("Input",  AudioChannelSet::stereo(), true)
@@ -55,6 +73,7 @@ SmallToneProcessor::SmallToneProcessor()
     pMidiChan = apvts.getRawParameterValue ("midichan");
     pMomentary = apvts.getRawParameterValue ("ccmomentary");
     presetName = factoryPresets()[0].name;
+    resetMidiMap();
     startTimerHz (60);
 }
 
@@ -106,21 +125,25 @@ void SmallToneProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& m
         {
             const int cc = msg.getControllerNumber(), v = msg.getControllerValue();
             const int lt = learnTarget.load();
-            if (lt >= 0)
+            if (lt >= 0 && lt < numLearn && cc < 120)
             {
-                (lt == 0 ? ccFoot : lt == 1 ? ccRate : ccDepth).store (cc);
+                for (int j = 0; j < numLearn; ++j)
+                    if (j != lt && ccMap[j].load() == cc) ccMap[j].store (-1);   // numéro déjà pris : l'autre commande est désassignée
+                ccMap[lt].store (cc);
+                if (lt == 0) footCcWasHigh = v >= 64;
                 lastLearned.store (lt); learnTarget.store (-1);
                 continue;
             }
-            if (cc == ccFoot.load())
+            if (cc == ccMap[0].load())
             {
                 const bool high = v >= 64;
                 if (momentary) { if (high && ! footCcWasHigh) pendingFootToggle.fetch_add (1); }
                 else pendingFootSet.store (high ? 1 : 0);
                 footCcWasHigh = high;
             }
-            if (cc == ccRate.load())  pendingRate.store (v / 127.0f);
-            if (cc == ccDepth.load()) pendingDepth.store (v >= 64 ? 1 : 0);
+            if (cc == ccMap[1].load()) pendingRate.store (v / 127.0f);
+            if (cc == ccMap[2].load()) pendingDepth.store (v >= 64 ? 1 : 0);
+            if (cc == ccMap[3].load()) pendingSync.store (v >= 64 ? 1 : 0);
         }
         else if (msg.isProgramChange())
         {
@@ -169,6 +192,8 @@ void SmallToneProcessor::timerCallback()
     if (r >= 0.0f) setParam ("rate", r);
     const int d = pendingDepth.exchange (-1);
     if (d >= 0) setParam ("depth", (float) d);
+    const int sy = pendingSync.exchange (-1);
+    if (sy >= 0) setParam ("sync", (float) sy);
     const int fs = pendingFootSet.exchange (-1);
     if (fs >= 0) setParam ("on", (float) fs);
     const int ft = pendingFootToggle.exchange (0);
@@ -259,9 +284,8 @@ void SmallToneProcessor::getStateInformation (MemoryBlock& dest)
 {
     auto state = apvts.copyState();
     std::unique_ptr<XmlElement> xml (state.createXml());
-    xml->setAttribute ("ccFoot", ccFoot.load());
-    xml->setAttribute ("ccRate", ccRate.load());
-    xml->setAttribute ("ccDepth", ccDepth.load());
+    for (int i = 0; i < numLearn; ++i)
+        xml->setAttribute (learnDef (i).key, ccMap[i].load());     // -1 = non assigné
     xml->setAttribute ("uiHeight", uiHeight.load());
     xml->setAttribute ("presetName", presetName);
     xml->setAttribute ("program", currentProgram);
@@ -274,9 +298,8 @@ void SmallToneProcessor::setStateInformation (const void* data, int size)
     {
         if (xml->hasTagName (apvts.state.getType()))
         {
-            ccFoot = xml->getIntAttribute ("ccFoot", 80);
-            ccRate = xml->getIntAttribute ("ccRate", 81);
-            ccDepth = xml->getIntAttribute ("ccDepth", 82);
+            for (int i = 0; i < numLearn; ++i)
+                ccMap[i].store (jlimit (-1, 127, xml->getIntAttribute (learnDef (i).key, learnDef (i).defaultCC)));
             uiHeight = jlimit (stui::heightDefault, stui::heightMax, xml->getIntAttribute ("uiHeight", stui::heightDefault));
             presetName = xml->getStringAttribute ("presetName");
             currentProgram = xml->getIntAttribute ("program", 0);

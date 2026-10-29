@@ -73,7 +73,7 @@ private:
     static constexpr double kStatusFade = 0.6;   // fondu de sortie de la ligne d'état (s)
     juce::String syncText() const;
     juce::String rateText() const;
-    void showContextMenu();
+    void showContextMenu (int learnIdx = -1);     // learnIdx >= 0 : clic droit sur une commande (MIDI Learn en tête du menu)
     void setWindowHeight (int h);
     void askUserPresetName (int slot);
     void rebuildScaledImages (float physScale = 0.0f);

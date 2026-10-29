@@ -57,9 +57,15 @@ public:
     void saveUserPreset (int slot, const juce::String& name);
 
     // ----- MIDI
-    std::atomic<int> ccFoot { 80 }, ccRate { 81 }, ccDepth { 82 };
-    std::atomic<int> learnTarget { -1 };      // 0 foot, 1 rate, 2 depth
+    // v1.2 MIDI Learn : toutes les commandes de la façade (0 footswitch, 1 rate, 2 depth, 3 sync / LED STATUS)
+    // numéros par défaut = anciens CC 80 à 82 (+ 83 pour SYNC, comme Phase 90)
+    struct LearnDef { const char* key; const char* name; int defaultCC; };
+    static constexpr int numLearn = 4;
+    static const LearnDef& learnDef (int i);
+    std::atomic<int> ccMap[numLearn];         // numéro de CC de chaque commande, -1 = non assigné
+    std::atomic<int> learnTarget { -1 };      // commande en attente d'un CC (-1 = pas de learn)
     std::atomic<int> lastLearned { -1 };      // pour l'affichage
+    void resetMidiMap();
     std::atomic<int> uiHeight { stui::heightDefault };
 
     // ----- infos pour l'interface
@@ -87,7 +93,7 @@ private:
 
     // changements venant du MIDI (thread audio) appliqués sur le thread de l'interface
     std::atomic<float> pendingRate { -1.0f };
-    std::atomic<int> pendingDepth { -1 }, pendingFootToggle { 0 }, pendingFootSet { -1 }, pendingProgram { -1 };
+    std::atomic<int> pendingDepth { -1 }, pendingFootToggle { 0 }, pendingFootSet { -1 }, pendingProgram { -1 }, pendingSync { -1 };
     bool footCcWasHigh = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SmallToneProcessor)

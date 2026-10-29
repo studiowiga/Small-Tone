@@ -37,7 +37,8 @@ communs à toutes les instances (`%APPDATA%\Studio Wiga\Small Tone\user_presets.
 - **Window size** : défaut (493 px de haut = taille minimale, comme Holyverb), 60 %, 75 %, 100 % — ou tirer le coin.
 - **Options** : RATE synchronisé au tempo du DAW (2 mesures → 1/16, aussi par clic sur la LED STATUS), stéréo élargie (LFO inversé à droite ;
   l'original est mono), souffle du BBD, anneau du RATE qui pulse avec le LFO.
-- **MIDI** : canal, *Learn* — par défaut Footswitch = CC 80, Rate = CC 81, Depth = CC 82 ;
+- **MIDI** : canal, *Learn* — par défaut Footswitch = CC 80, Rate = CC 81, Depth = CC 82, Sync = CC 83 ;
+  clic droit sur une commande (potard, switch, footswitch, LED STATUS / SYNC) → « MIDI Learn » / « Clear MIDI » ;
   pédale à verrouillage ou momentanée ; Program Change n = preset n+1.
 
 ## Fonctionnement (résumé)
@@ -56,3 +57,5 @@ Police Inter (licence SIL OFL, `OFL-Inter.txt`).
 - v1.1.0 : anti-gel v2 (JUCE 8.0.15, caches refaits par le timer, chien de garde, aucun appel à l'hôte depuis le thread audio)
 
 - v1.1.1 : menu de taille de fenêtre : « 60 % (default) », 75 %, 100 % (plus de taille en pixels)
+
+- v1.2.0 : MIDI Learn au clic droit sur chaque commande (Clear MIDI, assignations sauvegardées avec le projet)
